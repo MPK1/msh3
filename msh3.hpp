@@ -156,12 +156,13 @@ struct MsH3Request {
     bool Aborted {false};
     uint64_t AbortError {0};
     void* AppContext {nullptr};
+    MSH3_HEADER* Headers { nullptr };
     MsH3RequestHeaderRecvCallback* HeaderRecvFn {nullptr};
     MsH3RequestDataRecvCallback* DataRecvFn {nullptr};
     MsH3RequestComplete* CompleteFn {nullptr};
     MsH3Request(
         MsH3Connection& Connection,
-        const MSH3_HEADER* Headers,
+        MSH3_HEADER* Headers,
         size_t HeadersCount,
         MSH3_REQUEST_FLAGS Flags = MSH3_REQUEST_FLAG_NONE,
         void* AppContext = nullptr,
@@ -169,7 +170,7 @@ struct MsH3Request {
         MsH3RequestDataRecvCallback* DataRecv = nullptr,
         MsH3RequestComplete* Complete = nullptr,
         MsH3CleanUpMode CleanUpMode = CleanUpManual
-        ) noexcept : AppContext(AppContext), HeaderRecvFn(HeaderRecv), DataRecvFn(DataRecv), CompleteFn(Complete), CleanUp(CleanUpMode) {
+        ) noexcept : AppContext(AppContext), Headers(Headers), HeaderRecvFn(HeaderRecv), DataRecvFn(DataRecv), CompleteFn(Complete), CleanUp(CleanUpMode) {
         Handle = MsH3RequestOpen(Connection, &Interface, this, Headers, HeadersCount, Flags);
     }
 #ifdef MSH3_SERVER_SUPPORT

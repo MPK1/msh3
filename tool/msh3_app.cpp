@@ -18,6 +18,8 @@ struct Arguments {
     vector<const char*> Paths;
     bool Unsecure { false };
     bool Print { false };
+    bool Store { false };
+    const char* Downloads { nullptr };
     uint32_t Count { 1 };
     std::atomic_int CompletionCount { 0 };
     MsH3Connection* Connection { nullptr };
@@ -32,7 +34,54 @@ void MSH3_CALL HeaderReceived(struct MsH3Request* , const MSH3_HEADER* Header) {
     }
 }
 
-bool MSH3_CALL DataReceived(struct MsH3Request* , uint32_t* Length, const uint8_t* Data) {
+bool saveDataToFile(const char* Filename, const uint8_t* Data, size_t Length) {
+    FILE* fp = fopen(Filename, "wb");
+    if (!fp) {
+        fprintf(stderr, "Error opening file %s\n", Filename);
+        return false;
+    }
+    size_t Written = fwrite(Data, 1, Length, fp);
+    fclose(fp);
+    return Written == Length;
+}
+
+bool MSH3_CALL DataReceived(struct MsH3Request* Request, uint32_t* Length, const uint8_t* Data) {
+    if (Args.Store){
+        size_t PathLen = Request->Headers[1].ValueLength;
+        char* Path = (char*)malloc(PathLen + 1);
+        if (!Path) {
+            fprintf(stderr, "Memory allocation error\n");
+            return false;
+        }
+        strncpy(Path, (const char*)Request->Headers[1].Value, PathLen);
+        Path[PathLen] = '\0';
+
+        const char* LastSlash = strrchr(Path, '/');
+        char* Filename;
+        if (LastSlash) {
+            Filename = strdup(LastSlash + 1);
+        } else {
+            Filename = strdup(Path);
+        }
+        if (strlen(Filename) < 1) {
+            Filename = strdup("download");
+        }
+        size_t DownloadsLen = strlen(Args.Downloads);
+        char* FullFilename = (char*)malloc(DownloadsLen + strlen(Filename) + 2);
+        if (!FullFilename) {
+            fprintf(stderr, "Memory allocation error\n");
+            free(Filename);
+            return false;
+        }
+        snprintf(FullFilename, DownloadsLen + strlen(Filename) + 2, "%s/%s", Args.Downloads, Filename);
+        if (!saveDataToFile(FullFilename, Data, *Length)) {
+            fprintf(stderr, "Failed to save data to file\n");
+            free(Path);
+            return false;
+        }
+        free(Path);
+    }
+
     if (Args.Print) fwrite(Data, 1, *Length, stdout);
     return true;
 }
@@ -54,6 +103,7 @@ void ParseArgs(int argc, char **argv) {
                " -h, --help             Prints this help text\n"
                " -p, --path <path(s)>   The paths to query\n"
                " -u, --unsecure         Allows unsecure connections\n"
+               " -s, --store <path>     Stores each response to a file under the given path\n"
                " -v, --verbose          Enables verbose output\n"
                " -V, --version          Prints out the version\n",
               argv[0]);
@@ -89,6 +139,10 @@ void ParseArgs(int argc, char **argv) {
         } else if (!strcmp(argv[i], "--unsecure") || !strcmp(argv[i], "-u")) {
             Args.Unsecure = true;
 
+        } else if (!strcmp(argv[i], "--store") || !strcmp(argv[i], "-s")) {
+            Args.Store = true;
+            if (++i >= argc) { printf("Missing download path\n"); exit(-1); }
+            Args.Downloads = (char*)argv[i];
         } else if (!strcmp(argv[i], "--verbose") || !strcmp(argv[i], "-v")) {
             Args.Print = true;
 
